@@ -1,0 +1,10 @@
+﻿{
+  "mcpServers": {
+    "posthog": {
+      "url": "https://mcp.posthog.com/mcp",
+      "headers": {
+        "Authorization": "Bearer phx_yhsfdzvCqXN8ENhcP46EJ9STs2B31RNbGgMkj7UIOCYcFgq"
+      }
+    }
+  }
+}

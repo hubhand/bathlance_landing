@@ -12,12 +12,17 @@ import {
   Smartphone,
   ShieldCheck,
 } from "lucide-react";
+import { useScrollTracking } from "@/lib/use-scroll-tracking";
+import { usePostHog } from "posthog-js/react";
+import { getUTMParams } from "@/lib/use-utm-tracking";
 
 // ▼▼▼ 아래 주소를 고객님의 구글 웹 앱 URL로 꼭 바꿔주세요! ▼▼▼
 const WEBAPP_URL =
   "https://script.google.com/macros/s/AKfycbxjU4EJbwYzM8F28S8nqsOsktdKfs-eG6fOdugcCcF_-HAaXm7e75lFlLoXzh149BUW/exec";
 
 export default function BathlanceLanding() {
+  useScrollTracking();
+  const posthog = usePostHog();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
@@ -34,6 +39,23 @@ export default function BathlanceLanding() {
     e.preventDefault();
     setIsSubmitting(true);
 
+    // UTM 파라미터 가져오기
+    const utmParams = getUTMParams();
+
+    // 폼 제출 시작 이벤트
+    if (posthog) {
+      posthog.capture("form_submission_started", {
+        form_type: "application_form",
+        form_location: "landing_page",
+        form_id: "apply-form",
+        form_name: "사전 알림 신청 폼",
+        page_url: typeof window !== "undefined" ? window.location.href : "",
+        page_path:
+          typeof window !== "undefined" ? window.location.pathname : "",
+        ...utmParams,
+      });
+    }
+
     try {
       // 구글 앱스 스크립트 전송 로직 (no-cors 모드 사용)
       await fetch(WEBAPP_URL, {
@@ -48,9 +70,47 @@ export default function BathlanceLanding() {
       // no-cors 모드는 응답을 확인할 수 없으므로, 에러가 안 나면 성공으로 간주합니다.
       alert("신청이 완료되었습니다! 곧 연락드리겠습니다.");
       setFormData({ name: "", phone: "", email: "" }); // 폼 초기화
+
+      // 폼 제출 완료 이벤트
+      if (posthog) {
+        posthog.capture("form_submission_completed", {
+          form_type: "application_form",
+          form_location: "landing_page",
+          form_id: "apply-form",
+          form_name: "사전 알림 신청 폼",
+          has_name: !!formData.name,
+          has_email: !!formData.email,
+          has_phone: !!formData.phone,
+          has_idea: false,
+          idea_length: 0,
+          page_url: typeof window !== "undefined" ? window.location.href : "",
+          page_path:
+            typeof window !== "undefined" ? window.location.pathname : "",
+          utm_source: utmParams.utm_source,
+          utm_medium: utmParams.utm_medium,
+          utm_campaign: utmParams.utm_campaign,
+          utm_term: utmParams.utm_term,
+          utm_content: utmParams.utm_content,
+        });
+      }
     } catch (error) {
       console.error("Error:", error);
       alert("일시적인 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
+
+      // 폼 제출 실패 이벤트
+      if (posthog) {
+        posthog.capture("form_submission_failed", {
+          form_type: "application_form",
+          form_location: "landing_page",
+          form_id: "apply-form",
+          form_name: "사전 알림 신청 폼",
+          error: error instanceof Error ? error.message : "Unknown error",
+          page_url: typeof window !== "undefined" ? window.location.href : "",
+          page_path:
+            typeof window !== "undefined" ? window.location.pathname : "",
+          ...utmParams,
+        });
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -69,7 +129,11 @@ export default function BathlanceLanding() {
       </nav>
 
       {/* Hero Section */}
-      <header className="relative bg-[#f7e0a4] overflow-hidden">
+      <header
+        id="hero-section"
+        data-section-name="Hero Section"
+        className="relative bg-[#f7e0a4] overflow-hidden"
+      >
         <div className="container mx-auto px-4 py-16 md:py-24 flex flex-col md:flex-row items-center">
           <div className="md:w-1/2 z-10 space-y-6">
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold leading-tight text-slate-900">
@@ -131,7 +195,11 @@ export default function BathlanceLanding() {
       </header>
 
       {/* Problem Section */}
-      <section className="py-20 bg-white">
+      <section
+        id="problem-section"
+        data-section-name="Problem Section"
+        className="py-20 bg-white"
+      >
         <div className="container mx-auto px-4 text-center max-w-3xl">
           <div className="inline-block bg-orange-100 text-[#e1621c] px-4 py-1 rounded-full text-sm font-bold mb-6">
             WHY BATHLANCE?
@@ -180,7 +248,11 @@ export default function BathlanceLanding() {
       </section>
 
       {/* Solution Features */}
-      <section className="py-20 bg-slate-50">
+      <section
+        id="solution-section"
+        data-section-name="Solution Section"
+        className="py-20 bg-slate-50"
+      >
         <div className="container mx-auto px-4">
           <div className="text-center mb-16">
             <h2 className="text-3xl md:text-4xl font-bold mb-4">
@@ -238,7 +310,11 @@ export default function BathlanceLanding() {
       </section>
 
       {/* FAQ Section */}
-      <section className="py-20 bg-white">
+      <section
+        id="faq-section"
+        data-section-name="FAQ Section"
+        className="py-20 bg-white"
+      >
         <div className="container mx-auto px-4 max-w-3xl">
           <h2 className="text-3xl font-bold text-center mb-12">
             자주 묻는 질문
@@ -277,7 +353,11 @@ export default function BathlanceLanding() {
       </section>
 
       {/* CTA / Application Form */}
-      <section id="apply-form" className="py-24 bg-[#f7e0a4]">
+      <section
+        id="apply-form"
+        data-section-name="Application Form"
+        className="py-24 bg-[#f7e0a4]"
+      >
         <div className="container mx-auto px-4">
           <div className="max-w-xl mx-auto bg-white rounded-3xl shadow-2xl overflow-hidden">
             <div className="p-8 md:p-12">
@@ -386,7 +466,7 @@ export default function BathlanceLanding() {
       </section>
 
       {/* Footer */}
-      <footer className="bg-slate-900 text-slate-400 py-12">
+      <footer id="footer" data-section-name="Footer" className="bg-slate-900 text-slate-400 py-12">
         <div className="container mx-auto px-4 text-center">
           <div className="text-2xl font-bold text-white mb-6">BATHLANCE</div>
           <p className="mb-8">욕실에서 시작되는 건강한 라이프스타일</p>
