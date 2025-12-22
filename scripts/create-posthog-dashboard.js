@@ -104,8 +104,19 @@ function posthogRequest(method, endpoint, data = null) {
         try {
           const parsed = JSON.parse(body);
           if (res.statusCode >= 200 && res.statusCode < 300) {
+            // 성공 응답 로깅 (디버깅용)
+            if (endpoint.includes("/insights/") && method === "POST") {
+              console.log(
+                `   📝 API 응답:`,
+                JSON.stringify(parsed, null, 2).substring(0, 500)
+              );
+            }
             resolve(parsed);
           } else {
+            console.error(
+              `   ❌ API 오류 응답 (${res.statusCode}):`,
+              JSON.stringify(parsed, null, 2)
+            );
             reject(
               new Error(
                 `API Error (${res.statusCode}): ${JSON.stringify(parsed)}`
@@ -113,6 +124,7 @@ function posthogRequest(method, endpoint, data = null) {
             );
           }
         } catch (e) {
+          console.error(`   ❌ 응답 파싱 오류:`, body.substring(0, 500));
           reject(new Error(`Parse Error: ${body}`));
         }
       });
@@ -130,43 +142,168 @@ function posthogRequest(method, endpoint, data = null) {
 }
 
 /**
- * 인사이트를 대시보드에 추가
+ * 인사이트를 대시보드에 추가 (개선된 버전)
  */
 async function addInsightToDashboard(dashboardId, insightId) {
   try {
-    // 방법 1: 대시보드에 인사이트 추가
-    await posthogRequest(
-      "POST",
-      `/projects/@current/dashboards/${dashboardId}/insights/`,
-      { insight: insightId }
+    // 대시보드 정보 가져오기
+    const dashboard = await posthogRequest(
+      "GET",
+      `/projects/@current/dashboards/${dashboardId}/`
     );
-    console.log(`✅ 인사이트 ${insightId}를 대시보드에 추가 완료`);
-    return true;
-  } catch (error) {
-    // 방법 2: 대시보드 타일로 추가 (다른 API 형식)
-    try {
-      const dashboard = await posthogRequest(
-        "GET",
-        `/projects/@current/dashboards/${dashboardId}/`
-      );
 
-      const updatedTiles = [...(dashboard.tiles || []), { insight: insightId }];
+    // 기존 타일 목록 가져오기
+    const existingTiles = dashboard.tiles || [];
 
-      await posthogRequest(
-        "PATCH",
-        `/projects/@current/dashboards/${dashboardId}/`,
-        { tiles: updatedTiles }
+    // 인사이트가 이미 추가되어 있는지 확인
+    const alreadyAdded = existingTiles.some((tile) => {
+      const tileInsightId =
+        typeof tile.insight === "object" ? tile.insight?.id : tile.insight;
+      return tileInsightId === insightId || tileInsightId === String(insightId);
+    });
+
+    if (alreadyAdded) {
+      console.log(
+        `ℹ️  인사이트 ${insightId}는 이미 대시보드에 추가되어 있습니다.`
       );
-      console.log(`✅ 인사이트 ${insightId}를 대시보드에 추가 완료 (방법 2)`);
       return true;
-    } catch (e) {
-      console.warn(
-        `⚠️  인사이트 ${insightId}를 대시보드에 추가하는 중 오류:`,
-        e.message
-      );
-      return false;
     }
+
+    // 방법 1: POST 엔드포인트 시도
+    try {
+      await posthogRequest(
+        "POST",
+        `/projects/@current/dashboards/${dashboardId}/insights/`,
+        { insight: insightId }
+      );
+      console.log(
+        `✅ 인사이트 ${insightId}를 대시보드에 추가 완료 (POST 방법)`
+      );
+      return true;
+    } catch (postError) {
+      console.log(`⚠️  POST 방법 실패, PATCH 방법 시도: ${postError.message}`);
+    }
+
+    // 방법 2: PATCH로 타일 추가 (여러 형식 시도)
+    const tileFormats = [
+      { insight: insightId }, // 형식 1: 숫자 ID
+      { insight: String(insightId) }, // 형식 2: 문자열 ID
+      { insight: { id: insightId } }, // 형식 3: 객체 형식
+    ];
+
+    for (const newTile of tileFormats) {
+      try {
+        const updatedTiles = [...existingTiles, newTile];
+
+        await posthogRequest(
+          "PATCH",
+          `/projects/@current/dashboards/${dashboardId}/`,
+          { tiles: updatedTiles }
+        );
+
+        // 실제로 추가되었는지 확인
+        const verifyDashboard = await posthogRequest(
+          "GET",
+          `/projects/@current/dashboards/${dashboardId}/`
+        );
+        const verifyTiles = verifyDashboard.tiles || [];
+        const isActuallyAdded = verifyTiles.some((tile) => {
+          const tileInsightId =
+            typeof tile.insight === "object" ? tile.insight?.id : tile.insight;
+          return (
+            tileInsightId === insightId || tileInsightId === String(insightId)
+          );
+        });
+
+        if (isActuallyAdded) {
+          console.log(
+            `✅ 인사이트 ${insightId}를 대시보드에 추가 완료 (PATCH 방법, 검증됨)`
+          );
+          return true;
+        } else {
+          console.warn(
+            `⚠️  PATCH 요청은 성공했지만 실제로 대시보드에 추가되지 않았습니다.`
+          );
+          // 다음 형식 시도
+          continue;
+        }
+      } catch (formatError) {
+        // 다음 형식 시도
+        continue;
+      }
+    }
+
+    // 모든 방법 실패
+    console.warn(
+      `⚠️  인사이트 ${insightId}를 대시보드에 추가하는 모든 방법이 실패했습니다. 수동으로 추가해주세요.`
+    );
+    return false;
+  } catch (error) {
+    console.error(
+      `❌ 인사이트 ${insightId}를 대시보드에 추가하는 중 오류:`,
+      error.message
+    );
+    // 에러가 발생해도 계속 진행 (인사이트는 생성되었으므로)
+    return false;
   }
+}
+
+/**
+ * 기존 대시보드 찾기 또는 생성
+ */
+async function getOrCreateDashboard() {
+  console.log("📊 대시보드 찾는 중...");
+
+  try {
+    // 기존 대시보드 목록 가져오기
+    const dashboards = await posthogRequest(
+      "GET",
+      "/projects/@current/dashboards/"
+    );
+
+    // "UTM 파라미터별 퍼널 전환 분석" 대시보드 찾기
+    const matchingDashboards =
+      dashboards.results?.filter(
+        (d) => d.name === "UTM 파라미터별 퍼널 전환 분석"
+      ) || [];
+
+    if (matchingDashboards.length > 0) {
+      // 여러 개가 있으면 가장 최근 것 선택 (created_at 기준)
+      const sortedDashboards = matchingDashboards.sort((a, b) => {
+        const dateA = new Date(a.created_at || a.createdAt || 0);
+        const dateB = new Date(b.created_at || b.createdAt || 0);
+        return dateB - dateA; // 최신 것이 먼저
+      });
+
+      const latestDashboard = sortedDashboards[0];
+
+      if (matchingDashboards.length > 1) {
+        console.log(
+          `⚠️  같은 이름의 대시보드가 ${matchingDashboards.length}개 발견되었습니다.`
+        );
+        console.log(
+          `✅ 가장 최근 대시보드 선택: ${latestDashboard.id} (생성일: ${
+            latestDashboard.created_at || latestDashboard.createdAt
+          })`
+        );
+        console.log(
+          `💡 오래된 대시보드는 PostHog 웹사이트에서 수동으로 삭제하세요.`
+        );
+      } else {
+        console.log("✅ 기존 대시보드 찾음:", latestDashboard.id);
+      }
+
+      return latestDashboard;
+    }
+  } catch (error) {
+    console.warn(
+      "⚠️  대시보드 목록 조회 실패, 새로 생성합니다:",
+      error.message
+    );
+  }
+
+  // 대시보드가 없으면 새로 생성
+  return await createDashboard();
 }
 
 /**
@@ -194,6 +331,54 @@ async function createDashboard() {
   } catch (error) {
     console.error("❌ 대시보드 생성 실패:", error.message);
     throw error;
+  }
+}
+
+/**
+ * 인사이트가 실제로 생성되었는지 확인
+ */
+async function verifyInsightExists(insightId) {
+  try {
+    const insight = await posthogRequest(
+      "GET",
+      `/projects/@current/insights/${insightId}/`
+    );
+    console.log(
+      `   ✅ 인사이트 검증 완료: ${insight.name} (ID: ${insight.id})`
+    );
+    return insight;
+  } catch (error) {
+    console.error(`   ❌ 인사이트 검증 실패:`, error.message);
+    return null;
+  }
+}
+
+/**
+ * 인사이트 목록에서 특정 인사이트 찾기
+ */
+async function findInsightInList(insightName) {
+  try {
+    const insights = await posthogRequest(
+      "GET",
+      "/projects/@current/insights/?limit=100"
+    );
+
+    const found = insights.results?.find(
+      (insight) => insight.name === insightName
+    );
+
+    if (found) {
+      console.log(
+        `   ✅ 인사이트 목록에서 찾음: ${insightName} (ID: ${found.id})`
+      );
+      return found;
+    } else {
+      console.log(`   ⚠️  인사이트 목록에서 찾지 못함: ${insightName}`);
+      return null;
+    }
+  } catch (error) {
+    console.error(`   ❌ 인사이트 목록 조회 실패:`, error.message);
+    return null;
   }
 }
 
@@ -260,24 +445,63 @@ async function createFunnelInsight(dashboardId, name, breakdown) {
     name: name,
     description: breakdown ? `${breakdown}별 전환 퍼널 분석` : "전환 퍼널 분석",
     query: query,
-    dashboard: dashboardId,
+    // dashboard 필드 제거 - 인사이트 생성 후 별도로 추가
   };
 
   try {
+    console.log(
+      `   📤 요청 데이터:`,
+      JSON.stringify(insightData, null, 2).substring(0, 300)
+    );
     const insight = await posthogRequest(
       "POST",
       "/projects/@current/insights/",
       insightData
     );
     console.log(`✅ ${name} 인사이트 생성 완료:`, insight.id);
+    console.log(
+      `   📋 생성된 인사이트 정보:`,
+      JSON.stringify(insight, null, 2).substring(0, 500)
+    );
+
+    // 인사이트가 실제로 생성되었는지 확인
+    const verified = await verifyInsightExists(insight.id);
+    if (!verified) {
+      console.error(`   ❌ 인사이트 ${insight.id}가 실제로 존재하지 않습니다!`);
+      return null;
+    }
+
+    // 인사이트 상세 정보 출력
+    await printInsightDetails(insight.id, name);
+
+    // 인사이트 목록에서도 확인
+    const foundInList = await findInsightInList(name);
+    if (!foundInList) {
+      console.warn(
+        `   ⚠️  인사이트 ${name}가 목록에 표시되지 않습니다. 잠시 후 다시 확인해주세요.`
+      );
+      console.log(
+        `   💡 PostHog 웹사이트에서 직접 확인: ${POSTHOG_HOST}/insights/${insight.id}`
+      );
+    }
 
     // 대시보드에 추가
-    await addInsightToDashboard(dashboardId, insight.id);
+    const added = await addInsightToDashboard(dashboardId, insight.id);
+    if (!added) {
+      console.warn(
+        `⚠️  ${name} 인사이트는 생성되었지만 대시보드에 추가되지 않았습니다.`
+      );
+      console.log(
+        `   💡 PostHog 웹사이트에서 수동으로 추가: ${POSTHOG_HOST}/insights/${insight.id}`
+      );
+    }
 
     return insight;
   } catch (error) {
     console.error(`❌ ${name} 인사이트 생성 실패:`, error.message);
-    throw error;
+    console.error(`   📋 전체 오류 정보:`, error);
+    // 오류가 발생해도 계속 진행
+    return null;
   }
 }
 
@@ -294,24 +518,63 @@ async function createHogQLInsight(dashboardId, name, query) {
       kind: "HogQLQuery",
       query: query,
     },
-    dashboard: dashboardId,
+    // dashboard 필드 제거 - 인사이트 생성 후 별도로 추가
   };
 
   try {
+    console.log(
+      `   📤 요청 데이터:`,
+      JSON.stringify(insightData, null, 2).substring(0, 300)
+    );
     const insight = await posthogRequest(
       "POST",
       "/projects/@current/insights/",
       insightData
     );
     console.log(`✅ ${name} 인사이트 생성 완료:`, insight.id);
+    console.log(
+      `   📋 생성된 인사이트 정보:`,
+      JSON.stringify(insight, null, 2).substring(0, 500)
+    );
+
+    // 인사이트가 실제로 생성되었는지 확인
+    const verified = await verifyInsightExists(insight.id);
+    if (!verified) {
+      console.error(`   ❌ 인사이트 ${insight.id}가 실제로 존재하지 않습니다!`);
+      return null;
+    }
+
+    // 인사이트 상세 정보 출력
+    await printInsightDetails(insight.id, name);
+
+    // 인사이트 목록에서도 확인
+    const foundInList = await findInsightInList(name);
+    if (!foundInList) {
+      console.warn(
+        `   ⚠️  인사이트 ${name}가 목록에 표시되지 않습니다. 잠시 후 다시 확인해주세요.`
+      );
+      console.log(
+        `   💡 PostHog 웹사이트에서 직접 확인: ${POSTHOG_HOST}/insights/${insight.id}`
+      );
+    }
 
     // 대시보드에 추가
-    await addInsightToDashboard(dashboardId, insight.id);
+    const added = await addInsightToDashboard(dashboardId, insight.id);
+    if (!added) {
+      console.warn(
+        `⚠️  ${name} 인사이트는 생성되었지만 대시보드에 추가되지 않았습니다.`
+      );
+      console.log(
+        `   💡 PostHog 웹사이트에서 수동으로 추가: ${POSTHOG_HOST}/insights/${insight.id}`
+      );
+    }
 
     return insight;
   } catch (error) {
     console.error(`❌ ${name} 인사이트 생성 실패:`, error.message);
-    throw error;
+    console.error(`   📋 전체 오류 정보:`, error);
+    // 오류가 발생해도 계속 진행
+    return null;
   }
 }
 
@@ -347,24 +610,63 @@ async function createTrendsInsight(
     name: name,
     description: `${name} - ${event} 이벤트 분석`,
     query: query,
-    dashboard: dashboardId,
+    // dashboard 필드 제거 - 인사이트 생성 후 별도로 추가
   };
 
   try {
+    console.log(
+      `   📤 요청 데이터:`,
+      JSON.stringify(insightData, null, 2).substring(0, 300)
+    );
     const insight = await posthogRequest(
       "POST",
       "/projects/@current/insights/",
       insightData
     );
     console.log(`✅ ${name} 인사이트 생성 완료:`, insight.id);
+    console.log(
+      `   📋 생성된 인사이트 정보:`,
+      JSON.stringify(insight, null, 2).substring(0, 500)
+    );
+
+    // 인사이트가 실제로 생성되었는지 확인
+    const verified = await verifyInsightExists(insight.id);
+    if (!verified) {
+      console.error(`   ❌ 인사이트 ${insight.id}가 실제로 존재하지 않습니다!`);
+      return null;
+    }
+
+    // 인사이트 상세 정보 출력
+    await printInsightDetails(insight.id, name);
+
+    // 인사이트 목록에서도 확인
+    const foundInList = await findInsightInList(name);
+    if (!foundInList) {
+      console.warn(
+        `   ⚠️  인사이트 ${name}가 목록에 표시되지 않습니다. 잠시 후 다시 확인해주세요.`
+      );
+      console.log(
+        `   💡 PostHog 웹사이트에서 직접 확인: ${POSTHOG_HOST}/insights/${insight.id}`
+      );
+    }
 
     // 대시보드에 추가
-    await addInsightToDashboard(dashboardId, insight.id);
+    const added = await addInsightToDashboard(dashboardId, insight.id);
+    if (!added) {
+      console.warn(
+        `⚠️  ${name} 인사이트는 생성되었지만 대시보드에 추가되지 않았습니다.`
+      );
+      console.log(
+        `   💡 PostHog 웹사이트에서 수동으로 추가: ${POSTHOG_HOST}/insights/${insight.id}`
+      );
+    }
 
     return insight;
   } catch (error) {
     console.error(`❌ ${name} 인사이트 생성 실패:`, error.message);
-    throw error;
+    console.error(`   📋 전체 오류 정보:`, error);
+    // 오류가 발생해도 계속 진행
+    return null;
   }
 }
 
@@ -376,8 +678,8 @@ async function main() {
     console.log("🚀 PostHog 대시보드 생성 시작...\n");
     console.log(`📍 PostHog Host: ${POSTHOG_HOST}\n`);
 
-    // 1. 대시보드 생성
-    const dashboard = await createDashboard();
+    // 1. 기존 대시보드 찾기 또는 생성
+    const dashboard = await getOrCreateDashboard();
     const dashboardId = dashboard.id;
     console.log("");
 

@@ -44,16 +44,25 @@ export default function BathlanceLanding() {
 
     // 폼 제출 시작 이벤트
     if (posthog) {
-      posthog.capture("form_submission_started", {
-        form_type: "application_form",
-        form_location: "landing_page",
-        form_id: "apply-form",
-        form_name: "사전 알림 신청 폼",
-        page_url: typeof window !== "undefined" ? window.location.href : "",
-        page_path:
-          typeof window !== "undefined" ? window.location.pathname : "",
-        ...utmParams,
-      });
+      try {
+        posthog.capture("form_submission_started", {
+          form_type: "application_form",
+          form_location: "landing_page",
+          form_id: "application-form",
+          form_name: "사전 알림 신청 폼",
+          page_url: typeof window !== "undefined" ? window.location.href : "",
+          page_path:
+            typeof window !== "undefined" ? window.location.pathname : "",
+          ...utmParams,
+        });
+        if (process.env.NODE_ENV === "development") {
+          console.log("✅ 폼 제출 시작 이벤트 캡처 완료");
+        }
+      } catch (error) {
+        console.error("❌ 폼 제출 시작 이벤트 캡처 실패:", error);
+      }
+    } else {
+      console.warn("⚠️ PostHog가 초기화되지 않아 이벤트를 캡처할 수 없습니다.");
     }
 
     try {
@@ -73,43 +82,60 @@ export default function BathlanceLanding() {
 
       // 폼 제출 완료 이벤트
       if (posthog) {
-        posthog.capture("form_submission_completed", {
-          form_type: "application_form",
-          form_location: "landing_page",
-          form_id: "apply-form",
-          form_name: "사전 알림 신청 폼",
-          has_name: !!formData.name,
-          has_email: !!formData.email,
-          has_phone: !!formData.phone,
-          has_idea: false,
-          idea_length: 0,
-          page_url: typeof window !== "undefined" ? window.location.href : "",
-          page_path:
-            typeof window !== "undefined" ? window.location.pathname : "",
-          utm_source: utmParams.utm_source,
-          utm_medium: utmParams.utm_medium,
-          utm_campaign: utmParams.utm_campaign,
-          utm_term: utmParams.utm_term,
-          utm_content: utmParams.utm_content,
-        });
+        try {
+          posthog.capture("form_submission_completed", {
+            form_type: "application_form",
+            form_location: "landing_page",
+            form_id: "application-form",
+            form_name: "사전 알림 신청 폼",
+            has_name: !!formData.name,
+            has_email: !!formData.email,
+            has_phone: !!formData.phone,
+            has_idea: false,
+            idea_length: 0,
+            page_url: typeof window !== "undefined" ? window.location.href : "",
+            page_path:
+              typeof window !== "undefined" ? window.location.pathname : "",
+            utm_source: utmParams.utm_source,
+            utm_medium: utmParams.utm_medium,
+            utm_campaign: utmParams.utm_campaign,
+            utm_term: utmParams.utm_term,
+            utm_content: utmParams.utm_content,
+          });
+          if (process.env.NODE_ENV === "development") {
+            console.log("✅ 폼 제출 완료 이벤트 캡처 완료");
+          }
+        } catch (error) {
+          console.error("❌ 폼 제출 완료 이벤트 캡처 실패:", error);
+        }
+      } else {
+        console.warn(
+          "⚠️ PostHog가 초기화되지 않아 이벤트를 캡처할 수 없습니다."
+        );
       }
     } catch (error) {
-      console.error("Error:", error);
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
+      console.error("❌ 폼 제출 실패:", errorMessage);
       alert("일시적인 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
 
       // 폼 제출 실패 이벤트
       if (posthog) {
-        posthog.capture("form_submission_failed", {
-          form_type: "application_form",
-          form_location: "landing_page",
-          form_id: "apply-form",
-          form_name: "사전 알림 신청 폼",
-          error: error instanceof Error ? error.message : "Unknown error",
-          page_url: typeof window !== "undefined" ? window.location.href : "",
-          page_path:
-            typeof window !== "undefined" ? window.location.pathname : "",
-          ...utmParams,
-        });
+        try {
+          posthog.capture("form_submission_failed", {
+            form_type: "application_form",
+            form_location: "landing_page",
+            form_id: "application-form",
+            form_name: "사전 알림 신청 폼",
+            error: errorMessage,
+            page_url: typeof window !== "undefined" ? window.location.href : "",
+            page_path:
+              typeof window !== "undefined" ? window.location.pathname : "",
+            ...utmParams,
+          });
+        } catch (captureError) {
+          console.error("❌ 폼 제출 실패 이벤트 캡처 실패:", captureError);
+        }
       }
     } finally {
       setIsSubmitting(false);
@@ -122,15 +148,18 @@ export default function BathlanceLanding() {
       <nav className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-orange-100">
         <div className="container mx-auto px-4 py-4 flex justify-between items-center">
           <div className="text-2xl font-bold text-[#e1621c]">BATHLANCE</div>
-          <button className="bg-[#e1621c] text-white px-4 py-2 rounded-full hover:bg-[#c54e0b] transition-colors text-sm font-medium">
+          <a 
+            href="#application-form"
+            className="bg-[#e1621c] text-white px-4 py-2 rounded-full hover:bg-[#c54e0b] transition-colors text-sm font-medium inline-block"
+          >
             사전 신청하기
-          </button>
+          </a>
         </div>
       </nav>
 
       {/* Hero Section */}
       <header
-        id="hero-section"
+        id="hero"
         data-section-name="Hero Section"
         className="relative bg-[#f7e0a4] overflow-hidden"
       >
@@ -147,7 +176,7 @@ export default function BathlanceLanding() {
             </p>
             <div className="pt-4">
               <a
-                href="#apply-form"
+                href="#application-form"
                 className="inline-flex items-center bg-[#e1621c] text-white px-8 py-4 rounded-full text-lg font-bold hover:bg-[#c54e0b] transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-1"
               >
                 지금 무료로 시작하기 <ArrowRight className="ml-2 w-5 h-5" />
@@ -196,7 +225,7 @@ export default function BathlanceLanding() {
 
       {/* Problem Section */}
       <section
-        id="problem-section"
+        id="problem"
         data-section-name="Problem Section"
         className="py-20 bg-white"
       >
@@ -207,7 +236,7 @@ export default function BathlanceLanding() {
           <h2 className="text-3xl md:text-4xl font-bold mb-8">
             피부가 좋아지지 않는 이유,
             <br />
-            <span className="underline decoration-[#e1621c] decoration-4 underline-offset-4">
+            <span className="text-[#e1621c]">
               매일 쓰는 용품
             </span>{" "}
             때문일 수 있습니다.
@@ -247,9 +276,9 @@ export default function BathlanceLanding() {
         </div>
       </section>
 
-      {/* Solution Features */}
+      {/* Solution Section */}
       <section
-        id="solution-section"
+        id="solution"
         data-section-name="Solution Section"
         className="py-20 bg-slate-50"
       >
@@ -311,7 +340,7 @@ export default function BathlanceLanding() {
 
       {/* FAQ Section */}
       <section
-        id="faq-section"
+        id="faq"
         data-section-name="FAQ Section"
         className="py-20 bg-white"
       >
@@ -352,9 +381,9 @@ export default function BathlanceLanding() {
         </div>
       </section>
 
-      {/* CTA / Application Form */}
+      {/* Application Form Section */}
       <section
-        id="apply-form"
+        id="application-form"
         data-section-name="Application Form"
         className="py-24 bg-[#f7e0a4]"
       >
@@ -466,7 +495,11 @@ export default function BathlanceLanding() {
       </section>
 
       {/* Footer */}
-      <footer id="footer" data-section-name="Footer" className="bg-slate-900 text-slate-400 py-12">
+      <footer
+        id="footer"
+        data-section-name="Footer"
+        className="bg-slate-900 text-slate-400 py-12"
+      >
         <div className="container mx-auto px-4 text-center">
           <div className="text-2xl font-bold text-white mb-6">BATHLANCE</div>
           <p className="mb-8">욕실에서 시작되는 건강한 라이프스타일</p>
