@@ -174,6 +174,18 @@ export default function BathlanceLanding() {
               사진 한 장으로 시작하는 욕실 관리. BATHLANCE로 트러블 유발 성분을
               찾고 위생적인 욕실 라이프를 시작하세요.
             </p>
+            
+            {/* 홍보성 문구 */}
+            <div className="bg-white/80 backdrop-blur-sm rounded-xl p-6 shadow-md border border-orange-100 max-w-lg">
+              <p className="text-base md:text-lg text-slate-800 leading-relaxed text-center">
+                <span className="font-semibold text-[#e1621c]">지금 사전 신청하시면</span>
+                <br />
+                100명까지 <span className="font-semibold text-[#e1621c]">무료</span>로 서비스를 이용하실 수 있습니다.
+                <br />
+                <span className="font-semibold text-[#e1621c]">이 기회 놓치지 마세요.</span>
+              </p>
+            </div>
+            
             <div className="pt-4">
               <a
                 href="#application-form"
@@ -184,37 +196,16 @@ export default function BathlanceLanding() {
             </div>
           </div>
           <div className="md:w-1/2 mt-10 md:mt-0 relative">
-            {/* 핸드폰 목업 느낌의 플레이스홀더 */}
-            <div className="relative mx-auto border-gray-800 dark:border-gray-800 bg-gray-800 border-[14px] rounded-[2.5rem] h-[600px] w-[300px] shadow-xl">
-              <div className="h-[32px] w-[3px] bg-gray-800 absolute -left-[17px] top-[72px] rounded-l-lg"></div>
-              <div className="h-[46px] w-[3px] bg-gray-800 absolute -left-[17px] top-[124px] rounded-l-lg"></div>
-              <div className="h-[46px] w-[3px] bg-gray-800 absolute -left-[17px] top-[178px] rounded-l-lg"></div>
-              <div className="h-[64px] w-[3px] bg-gray-800 absolute -right-[17px] top-[142px] rounded-r-lg"></div>
-              <div className="rounded-[2rem] overflow-hidden w-[272px] h-[572px] bg-white dark:bg-gray-800 relative">
-                {/* 앱 실행 화면 이미지 */}
-                <img
-                  src="/app-screenshot.png.jpg"
-                  alt="앱 실행 화면 예시 (AI 스캔 중)"
-                  className="w-full h-full object-cover"
-                  onError={(e) => {
-                    // 이미지 로드 실패 시 플레이스홀더 표시
-                    const img = e.target as HTMLImageElement;
-                    img.style.display = "none";
-                    const placeholder = img.nextElementSibling as HTMLElement;
-                    if (placeholder) {
-                      placeholder.style.display = "flex";
-                    }
-                  }}
-                />
-                {/* 이미지가 없을 경우 표시되는 플레이스홀더 */}
-                <div className="absolute inset-0 w-full h-full bg-slate-100 flex items-center justify-center text-center p-4 hidden">
-                  <span className="text-slate-400">
-                    앱 실행 화면 예시
-                    <br />
-                    (AI 스캔 중)
-                  </span>
-                </div>
-              </div>
+            {/* 홍보 이미지 */}
+            <div className="relative mx-auto w-full max-w-lg">
+              <img
+                src="/promo-image.jpg"
+                alt="배슬랜스 홍보 이미지"
+                className="w-full h-auto rounded-lg shadow-2xl transform hover:scale-105 transition-transform duration-300"
+                style={{
+                  boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(0, 0, 0, 0.05)',
+                }}
+              />
             </div>
           </div>
         </div>
@@ -352,7 +343,7 @@ export default function BathlanceLanding() {
             {[
               {
                 q: "서비스 이용료는 얼마인가요?",
-                a: "현재 베타 서비스 기간으로 모든 기능을 무료로 이용하실 수 있습니다.",
+                a: "현재는 베타 서비스 기간으로 모든 기능을 무료로 100명까지 이용할 수 있는 기간입니다.",
               },
               {
                 q: "사진만 찍으면 정말 다 되나요?",
